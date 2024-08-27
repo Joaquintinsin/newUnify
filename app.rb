@@ -7,6 +7,7 @@ require 'sinatra/cors'
 require 'dotenv/load'
 require 'pdf-reader'
 require 'openai'
+require 'json'
 require 'byebug'
 
 require './config/environment'
@@ -37,13 +38,14 @@ get '/login' do
   erb :login
 end
 
+
 post '/login' do
   if !isAnUserPresent
-    username = params[:username] || email = params[:email]
+    username_or_email = params[:username_or_email]
     password = params[:password]
 
-    if (username && password)
-      @user = User.find_by(username: username, email: email, password: password)
+    if (username_or_email && password)
+      @user = User.find_by(username: username_or_email, password: password) || User.find_by(email: username_or_email, password: password)
       if @user
         isAnUserPresent = true
         redirect '/'
@@ -52,7 +54,7 @@ post '/login' do
         erb :login
       end
     else
-      @error = 'Datos incorrectos, por favor revisar nuevamente!'
+      @error = 'Datos incorrectos, por favor revisar nuevamentee!'
       erb :login
     end
   else
@@ -99,6 +101,24 @@ end
 post '/logout' do
   isAnUserPresent = false
   redirect '/'
+end
+
+get '/question/:id' do
+  @question = Question.find(params[:id])
+
+  erb :question
+end
+
+post '/question/:id/answer' do
+  question = Question.find(params[:id])
+  selected_option = Option.find(params[:option_id])
+  if question.answer.option == selected_option
+    @result = 'Correcto!'
+  else
+    @result = 'Incorrectoooo!'
+  end
+
+  erb :result
 end
 
 def client
@@ -159,9 +179,10 @@ def parse_response(response)
     json_part = raw_string.split("\n\n", 2).last
     cleaned_str = json_part.gsub(/\\n/, '').gsub('\n', '')
     begin
-      JSON.parse(cleaned_str)
+      [JSON.parse(cleaned_str)]
     rescue JSON::ParserError
-      cleaned_str
+      #['holaJoaquin', 'resp1', 'resp2', 'resp3']
+      [cleaned_str]
     end
   end
 end
