@@ -30,7 +30,7 @@ get '/us' do
 end
 
 get '/register' do
-  erb :loginReg
+  erb :registration
 end
 
 get '/login' do
@@ -73,7 +73,7 @@ post '/register' do
 
     if username.nil? || name.nil? || email.nil? || password.nil? || username.strip.empty? || name.strip.empty? || email.strip.empty? || password.strip.empty?
       @error = 'Se debe llenar los campos Username, Name, Email y Password obligatoriamente!'
-      erb :loginReg
+      erb :registration
     else
       @user = User.create(username: username, name: name, lastname: lastname, cellphone: cellphone, email: email, password: password)
       if @user.persisted?
@@ -81,14 +81,14 @@ post '/register' do
         redirect '/'
       else
         @error = 'Error al registrar el usuario. Intente nuevamente.'
-        erb :loginReg
+        erb :registration
       end
     end
 
     isAnUserPresent = @user ? true : false
   else
     @error = 'Para registrar un nuevo usuario primero se debe salir de la cuenta actual!'
-    erb :loginReg
+    erb :registration
   end
 end
 
