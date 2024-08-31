@@ -10,7 +10,6 @@ gem 'rackup'
 gem 'rake'
 gem 'sinatra'
 gem 'puma'
-gem 'simplecov', require: false, group: :test
 gem 'json'
 gem 'sinatra-cors'
 gem 'sqlite3', '~> 1.4'
@@ -18,4 +17,5 @@ gem 'sqlite3', '~> 1.4'
 group :test do
   gem 'rspec'
   gem 'rack-test'
+  gem 'simplecov'
 end
