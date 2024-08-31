@@ -18,6 +18,7 @@ def app
 end
 
 require 'rspec'
+require 'sinatra/activerecord'
 require 'rack/test'
 require 'dotenv'
 require 'ollama-ai'

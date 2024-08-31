@@ -1,6 +1,6 @@
 source 'https://rubygems.org'
 
-gem 'activerecord'
+gem 'sinatra-activerecord'
 gem 'byebug'
 gem 'dotenv', groups: [:development, :test]
 gem 'ollama-ai', '~> 1.2.1'
