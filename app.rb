@@ -30,7 +30,7 @@ get '/us' do
 end
 
 get '/register' do
-  erb :registration
+  erb :register
 end
 
 get '/login' do
@@ -49,11 +49,11 @@ post '/login' do
         isAnUserPresent = true
         redirect '/'
       else
-        @error = 'Datos incorrectos, por favor revisar nuevamente!'
+        @error = 'No se encontró el usuario o el correo, o la contraseña es incorrecta!'
         erb :login
       end
     else
-      @error = 'Datos incorrectos, por favor revisar nuevamentee!'
+      @error = 'Ingrese el nombre de usuario o correo electronico y la contraseña!'
       erb :login
     end
   else
@@ -62,6 +62,8 @@ post '/login' do
   end
 end
 
+# Variable global a los metodos utilizada en POST Register para manejar errores
+error_registration = ''
 post '/register' do
   if !isAnUserPresent
     username = params[:username]
@@ -72,23 +74,44 @@ post '/register' do
     password = params[:password]
 
     if username.nil? || name.nil? || email.nil? || password.nil? || username.strip.empty? || name.strip.empty? || email.strip.empty? || password.strip.empty?
-      @error = 'Se debe llenar los campos Username, Name, Email y Password obligatoriamente!'
-      erb :registration
+      error_registration = 'missing_fields'
+      redirect '/error-register'
+      # Entra solamente por aca cuando se ponen espacios, porque el ".nil?" ya lo controla el form en el ERB con la clausula "required"
     else
-      @user = User.create(username: username, name: name, lastname: lastname, cellphone: cellphone, email: email, password: password)
-      if @user.persisted?
-        isAnUserPresent = true
-        redirect '/'
+      @user = User.find_by(username: username) || User.find_by(email: email)
+      if @user
+        error_registration = 'user_exists'
+        redirect '/error-register'
       else
-        @error = 'Error al registrar el usuario. Intente nuevamente.'
-        erb :registration
+        @user = User.create(username: username, name: name, lastname: lastname, cellphone: cellphone, email: email, password: password)
+        if @user.persisted?
+          error_registration = ''
+          isAnUserPresent = true
+          redirect '/'
+        else
+          error_registration = 'user_not_persisted'
+          redirect '/error-register'
+        end
       end
     end
-
-    isAnUserPresent = @user ? true : false
   else
-    @error = 'Para registrar un nuevo usuario primero se debe salir de la cuenta actual!'
-    erb :registration
+    error_registration = 'already_logged_in'
+    redirect '/error-register'
+  end
+end
+
+get '/error-register' do
+  case error_registration
+  when 'missing_fields'
+    erb :error_missing_fields
+  when 'user_exists'
+    erb :error_user_exists
+  when 'user_not_persisted'
+    erb :error_registration_failed
+  when 'already_logged_in'
+    erb :error_already_logged_in
+  else
+    redirect '/register'
   end
 end
 
