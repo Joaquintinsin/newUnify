@@ -65,38 +65,33 @@ end
 # Variable global a los metodos utilizada en POST Register para manejar errores
 error_registration = ''
 post '/register' do
-  if !isAnUserPresent
-    username = params[:username]
-    name = params[:name]
-    lastname = params[:lastname] || 'Apellido No registrado'
-    cellphone = params[:cellphone] || 'Celular No registrado'
-    email = params[:email]
-    password = params[:password]
+  username = params[:username]
+  name = params[:name]
+  lastname = params[:lastname] || 'Apellido No registrado'
+  cellphone = params[:cellphone] || 'Celular No registrado'
+  email = params[:email]
+  password = params[:password]
 
-    if username.nil? || name.nil? || email.nil? || password.nil? || username.strip.empty? || name.strip.empty? || email.strip.empty? || password.strip.empty?
-      error_registration = 'missing_fields'
+  if username.nil? || name.nil? || email.nil? || password.nil? || username.strip.empty? || name.strip.empty? || email.strip.empty? || password.strip.empty?
+    error_registration = 'missing_fields'
+    redirect '/error-register'
+    # Entra solamente por aca cuando se ponen espacios, porque el ".nil?" ya lo controla el form en el ERB con la clausula "required"
+  else
+    @user = User.find_by(username: username) || User.find_by(email: email)
+    if @user
+      error_registration = 'user_exists'
       redirect '/error-register'
-      # Entra solamente por aca cuando se ponen espacios, porque el ".nil?" ya lo controla el form en el ERB con la clausula "required"
     else
-      @user = User.find_by(username: username) || User.find_by(email: email)
-      if @user
-        error_registration = 'user_exists'
-        redirect '/error-register'
+      @user = User.create(username: username, name: name, lastname: lastname, cellphone: cellphone, email: email, password: password)
+      if @user.persisted?
+        error_registration = ''
+        isAnUserPresent = true
+        redirect '/'
       else
-        @user = User.create(username: username, name: name, lastname: lastname, cellphone: cellphone, email: email, password: password)
-        if @user.persisted?
-          error_registration = ''
-          isAnUserPresent = true
-          redirect '/'
-        else
-          error_registration = 'user_not_persisted'
-          redirect '/error-register'
-        end
+        error_registration = 'user_not_persisted'
+        redirect '/error-register'
       end
     end
-  else
-    error_registration = 'already_logged_in'
-    redirect '/error-register'
   end
 end
 
@@ -108,8 +103,6 @@ get '/error-register' do
     erb :error_user_exists
   when 'user_not_persisted'
     erb :error_registration_failed
-  when 'already_logged_in'
-    erb :error_already_logged_in
   else
     redirect '/register'
   end
