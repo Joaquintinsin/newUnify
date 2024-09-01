@@ -11,9 +11,9 @@
 /tmp/
 
 # Database files
-db/database.sqlite3
-db/database.sqlite3-shm
-db/database.sqlite3-wal
+/db/database.sqlite3
+/db/database.sqlite3-shm
+/db/database.sqlite3-wal
 
 # Used by dotenv library to load environment variables.
 # .env
