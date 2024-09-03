@@ -6,7 +6,6 @@ require 'sinatra/activerecord'
 require 'sinatra/cors'
 require 'dotenv/load'
 require 'pdf-reader'
-require 'openai'
 require 'json'
 require 'byebug'
 
@@ -31,7 +30,7 @@ get '/us' do
 end
 
 get '/register' do
-  erb :loginReg
+  erb :register
 end
 
 get '/login' do
@@ -50,11 +49,11 @@ post '/login' do
         isAnUserPresent = true
         redirect '/'
       else
-        @error = 'Datos incorrectos, por favor revisar nuevamente!'
+        @error = 'No se encontró el usuario o el correo, o la contraseña es incorrecta!'
         erb :login
       end
     else
-      @error = 'Datos incorrectos, por favor revisar nuevamentee!'
+      @error = 'Ingrese el nombre de usuario o correo electronico y la contraseña!'
       erb :login
     end
   else
@@ -63,33 +62,49 @@ post '/login' do
   end
 end
 
+# Variable global a los metodos utilizada en POST Register para manejar errores
+error_registration = ''
 post '/register' do
-  if !isAnUserPresent
-    username = params[:username]
-    name = params[:name]
-    lastname = params[:lastname] || 'Apellido No registrado'
-    cellphone = params[:cellphone] || 'Celular No registrado'
-    email = params[:email]
-    password = params[:password]
+  username = params[:username]
+  name = params[:name]
+  lastname = params[:lastname] || 'Apellido No registrado'
+  cellphone = params[:cellphone] || 'Celular No registrado'
+  email = params[:email]
+  password = params[:password]
 
-    if username.nil? || name.nil? || email.nil? || password.nil?
-      @error = 'Se debe llenar los campos Username, Name, Email y Password obligatoriamente!'
-      erb :loginReg
+  if username.nil? || name.nil? || email.nil? || password.nil? || username.strip.empty? || name.strip.empty? || email.strip.empty? || password.strip.empty?
+    error_registration = 'missing_fields'
+    redirect '/error-register'
+    # Entra solamente por aca cuando se ponen espacios, porque el ".nil?" ya lo controla el form en el ERB con la clausula "required"
+  else
+    @user = User.find_by(username: username) || User.find_by(email: email)
+    if @user
+      error_registration = 'user_exists'
+      redirect '/error-register'
     else
       @user = User.create(username: username, name: name, lastname: lastname, cellphone: cellphone, email: email, password: password)
       if @user.persisted?
+        error_registration = ''
         isAnUserPresent = true
         redirect '/'
       else
-        @error = 'Error al registrar el usuario. Intente nuevamente.'
-        erb :loginReg
+        error_registration = 'user_not_persisted'
+        redirect '/error-register'
       end
     end
+  end
+end
 
-    isAnUserPresent = @user ? true : false
+get '/error-register' do
+  case error_registration
+  when 'missing_fields'
+    erb :error_missing_fields
+  when 'user_exists'
+    erb :error_user_exists
+  when 'user_not_persisted'
+    erb :error_registration_failed
   else
-    @error = 'Para registrar un nuevo usuario primero se debe salir de la cuenta actual!'
-    erb :loginReg
+    redirect '/register'
   end
 end
 
@@ -101,6 +116,10 @@ end
 post '/logout' do
   isAnUserPresent = false
   redirect '/'
+end
+
+get '/practice' do
+  erb :practice
 end
 
 get '/question/:id' do
@@ -122,20 +141,17 @@ post '/question/:id/answer' do
 end
 
 def client
-  options =
-    if open_ai?
-      { access_token: ENV['TOKEN_OPENAI'], log_errors: true }
-    else
-      { uri_base: OLLAMA_LOCAL_CONFIGURATION }
-    end
+  token = ENV['OLLAMA_API_TOKEN']
 
-  puts "Initializing #{open_ai? ? 'OpenAI' : 'Ollama'} AI..."
-
-  @client ||= OpenAI::Client.new(**options)
-end
-
-def open_ai?
-  ENV['AI_ENGINE'] == 'openai' && ENV.key?('TOKEN_OPENAI')
+  if token.nil? || token.empty?
+    raise "Missing Ollama token!"
+  else
+    @client = Ollama.new(
+      credentials: { address: 'http://localhost:11434' },
+      options: { server_sent_events: true }
+    )
+    @client ||= Ollama::Client.new(api_key: token)
+  end
 end
 
 # Generate questions based on `full_text`
@@ -153,12 +169,8 @@ def generate_questions(full_text)
   STRING
 
   response = client.chat(
-    parameters: {
-      model: open_ai? ? 'gpt-3.5-turbo' : 'llama3',
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: full_text }
-      ],
+    { model: 'llama2',
+      messages: [ { role: 'user', content: prompt }],
       temperature: 0.7
     }
   )
@@ -166,24 +178,14 @@ def generate_questions(full_text)
   parse_response(response)
 end
 
-# Response is slightly different depending of the AI engine used
-#
 def parse_response(response)
-  if open_ai?
-    response['choices'].map do |choice|
-      JSON.parse(choice.dig('message', 'content'))
-    end
-  else
-    # Make our best effort to parse the answer
-    raw_string = response.dig('choices', 0, 'message', 'content')
-    json_part = raw_string.split("\n\n", 2).last
-    cleaned_str = json_part.gsub(/\\n/, '').gsub('\n', '')
-    begin
-      [JSON.parse(cleaned_str)]
-    rescue JSON::ParserError
-      #['holaJoaquin', 'resp1', 'resp2', 'resp3']
-      [cleaned_str]
-    end
+  raw_string = response.dig('choices', 0, 'message', 'content')
+  json_part = raw_string.split("\n\n", 2).last
+  cleaned_str = json_part.gsub(/\\n/, '').gsub('\n', '')
+  begin
+    JSON.parse(cleaned_str)
+  rescue JSON::ParserError
+    cleaned_str
   end
 end
 
