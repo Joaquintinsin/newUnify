@@ -1,0 +1,21 @@
+source 'https://rubygems.org'
+
+git_source(:github) { |repo| "https://github.com/#{repo}.git" }
+
+gem 'pdf-reader'
+gem 'puma'
+gem 'ruby-openai'
+gem 'sinatra'
+
+group :test do
+  gem 'rack-test'
+  gem 'rspec'
+end
+
+gem 'byebug'
+
+gem 'ollama-ai', '~> 1.2.1'
+
+gem 'dotenv', groups: %i[development test]
+
+gem 'rackup', '~> 2.1'
