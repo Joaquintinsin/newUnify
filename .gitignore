@@ -10,6 +10,10 @@
 /test/version_tmp/
 /tmp/
 
+# Ignoring Gemfile.lock in case operative systems need a different one.
+# Now to use this project must do bundle install manually before anything
+Gemfile.lock
+
 # Database files
 /db/database.sqlite3
 /db/database.sqlite3-shm
