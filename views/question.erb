@@ -1,11 +1,16 @@
-<h1><%= @question.content %></h1>
-
-<form action="/question/<%= @question.id %>/answer" method="post">
-  <% @question.options.each do |option| %>
-    <div>
-      <input type="radio" name="option_id" value="<%= option.id %>" id="option_<%= option.id %>">
-      <label for="option_<%= option.id %>"><%= option.content %></label>
-    </div>
-  <% end %>
-  <button type="submit">Enviar</button>
-</form>
+<h1>Cuestionario</h1>
+<% @questions.each do |question| %>
+  <div class="question">
+    <h2><%= question["question"] %></h2>
+    <form action="/question/<%= question["question"] %>/answer" method="post">
+      <% question["options"].each_with_index do |option, index| %>
+        <div>
+          <input type="radio" name="option_id_<%= question["question"] %>" value="<%= option %>" id="option_<%= index %>">
+          <label for="option_<%= index %>"><%= option %></label>
+        </div>
+      <% end %>
+      <button type="submit">Enviar respuesta</button>
+    </form>
+  </div>
+  <hr>
+<% end %>

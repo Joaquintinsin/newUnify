@@ -17,10 +17,6 @@ require './config/environment'
 set :allow_origin, 'http://127.0.0.1:3000'
 set :port, 3000
 
-OpenAI.configure do |config|
-  config.access_token = ENV['TOKEN_OPENAI']
-end
-
 # Variable global para el manejo de un usuario activo o inactivo
 isAnUserPresent = false
 
@@ -66,6 +62,7 @@ get '/logout' do
 end
 
 get '/practice' do
+  # redirect '/' unless isAnUserPresent # Descomentar al final: defensiva de Practice sin loguear
   erb :practice
 end
 
@@ -136,110 +133,88 @@ post '/practice' do
   logger.info 'Received request to generate quiz'
   logger.info "Params: #{params.inspect}"
 
-  file = nil
-
-  if params[:file] && params[:file][:tempfile]
-    file = params[:file][:tempfile]
-    status 200
-    logger.info 'Successfully received file from tempfile'
-  elsif params[:url]
-    begin
-      file = URI.open(params[:url])
-      status 200
-      logger.info 'Successfully opened file from URL'
-    rescue StandardError => e
-      logger.error "Failed to open file from URL: #{e.message}"
-      status 400
-      return json error: 'Failed to open file from URL'
-    end
-  end
-
-  if file.nil?
-    logger.error 'No file or URL provided'
-    status 400
-    return json error: 'No file or URL provided'
-  end
+  file = fetch_file(params)
+  return file unless file.is_a?(Tempfile)
 
   full_text = extract_text_from_pdf(file)
+  return json_error('Failed to extract text from PDF', 500) if full_text.empty?
 
-  if full_text.empty?
-    logger.error 'Failed to extract text from PDF'
-    status 500
-    return json error: 'Failed to extract text from PDF'
-  end
+  @questions = generate_questions(full_text)
+  return json_error('Failed to generate quiz', 503) unless @questions
 
-  structured_prompt = '' + "
-  Generate 10 insightful questions based on the following text. For each question, provide 4 multiple-choice options and indicate the correct answer.
-  Please format each question as a JSON object within a list, with 'question', 'options' (a list of choices), and 'answer' (the correct choice) keys.
-  Provide the response in Spanish.
-  " + ''
+  status 200
+  erb :question
+end
 
-  begin
-    client = OpenAI::Client.new
-    response = client.chat(
-      parameters: {
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: structured_prompt },
-          { role: 'user', content: full_text }
-        ],
-        max_tokens: 3000,
-        temperature: 0.5
-      }
-    )
 
-    logger.info 'Received response from OpenAI'
-    logger.info "Response: #{response.inspect}"
-
-    response_content = response['choices'][0]['message']['content'].strip
-
-    response_content.gsub!(/^```json\n/, '')
-    response_content.gsub!(/\n```$/, '')
-
-    structured_response = JSON.parse(response_content)
-
-    status 200
-    json questions_and_answers: structured_response
-  rescue JSON::ParserError => e
-    logger.error "Failed to parse JSON response: #{e.message}"
-    status 502
-    return json error: 'Failed to parse JSON response'
-  rescue StandardError => e
-    logger.error "Failed to generate quiz: #{e.message}"
-    status 503
-    return json error: 'Failed to generate quiz'
+# Fetches the file from a file upload
+def fetch_file(params)
+  if params[:file] && params[:file][:tempfile]
+    logger.info 'Successfully received file from tempfile'
+    params[:file][:tempfile]
+  else
+    logger.error 'No file provided'
+    json_error('No file provided', 400)
   end
 end
 
+# Initializes the OpenAI client
+def client
+  options = { access_token: ENV['TOKEN_OPENAI'], log_errors: true }
+  @client ||= OpenAI::Client.new(**options)
+end
+
+# Generates questions using the AI model based on the provided text
+def generate_questions(full_text)
+  prompt = <<-PROMPT
+    Generate 10 insightful questions based on the following text. For each question, provide 4 multiple-choice options and indicate the correct answer.
+    Please format each question as a JSON object within a list, with 'question', 'options' (a list of choices), and 'answer' (the correct choice) keys.
+    Provide the response in Spanish.
+  PROMPT
+
+  response = client.chat(
+    parameters: {
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: prompt },
+        { role: 'user', content: full_text }
+      ],
+      max_tokens: 3000,
+      temperature: 0.5
+    }
+  )
+
+  # Ver que devolvio GPT por consola
+  puts response.inspect
+
+  parse_response(response)
+rescue JSON::ParserError => e
+  logger.error "Failed to parse JSON response: #{e.message}"
+  nil
+end
+
+# Parses the response from the AI and extracts the questions
+def parse_response(response)
+  content = response.dig('choices', 0, 'message', 'content')
+  content.gsub!(/^```json\n/, '').gsub!(/\n```$/, '')
+  puts "Raw response: #{content}" 
+  JSON.parse(content)
+rescue StandardError => e
+  logger.error "Failed to parse AI response: #{e.message}"
+  nil
+end
+
+# Extracts text from the provided PDF file
 def extract_text_from_pdf(file)
-  text = ''
+  pdf = PDF::Reader.new(file)
+  pdf.pages.map(&:text).join
+rescue StandardError => e
+  logger.error "Direct PDF text extraction failed: #{e.message}"
+  ''
+end
 
-  begin
-    reader = PDF::Reader.new(file)
-    reader.pages.each do |page|
-      text << page.text
-    end
-  rescue StandardError => e
-    logger.error "Direct PDF text extraction failed: #{e.message}"
-  end
-
-  if text.strip.empty?
-    logger.info 'Attempting OCR extraction as fallback'
-    begin
-      images = pdf_to_images(file)
-      images.each do |image|
-        ocr_text = extract_text_from_image(image)
-        text << ocr_text
-      end
-    rescue StandardError => e
-      logger.error "OCR text extraction failed: #{e.message}"
-    end
-  end
-
-  if text.strip.empty?
-    logger.warn 'No text could be extracted from the PDF'
-    text = 'No se pudo extraer texto del archivo PDF.'
-  end
-
-  text
+# Helper method for JSON error responses
+def json_error(message, status_code)
+  status status_code
+  json error: message
 end
