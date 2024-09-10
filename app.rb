@@ -16,6 +16,7 @@ require './config/environment'
 
 set :allow_origin, 'http://127.0.0.1:3000'
 set :port, 3000
+enable :sessions
 
 # Variable global para el manejo de un usuario activo o inactivo
 isAnUserPresent = false
@@ -24,7 +25,7 @@ isAnUserPresent = false
 error_registration = ''
 
 before do
-  @isAnUserPresent = isAnUserPresent
+  @isAnUserPresent = session[:isAnUserPresent] || false
 end
 
 get '/' do
@@ -57,7 +58,7 @@ get '/error-register' do
 end
 
 get '/logout' do
-  isAnUserPresent = false
+  session[:isAnUserPresent] = false
   redirect '/'
 end
 
@@ -67,16 +68,14 @@ get '/practice' do
 end
 
 post '/login' do
-  if !isAnUserPresent
+  if !session[:isAnUserPresent]
     username_or_email = params[:username_or_email]
     password = params[:password]
 
     if username_or_email && password
-      @user = User.find_by(username: username_or_email,
-                           password: password) || User.find_by(email: username_or_email,
-                                                               password: password)
+      @user = User.find_by(username: username_or_email, password: password) || User.find_by(email: username_or_email, password: password)
       if @user
-        isAnUserPresent = true
+        session[:isAnUserPresent] = true
         redirect '/'
       else
         @error = 'No se encontró el usuario o el correo, o la contraseña es incorrecta!'
@@ -114,7 +113,7 @@ post '/register' do
                           password: password)
       if @user.persisted?
         error_registration = ''
-        isAnUserPresent = true
+        session[:isAnUserPresent] = true
         redirect '/'
       else
         error_registration = 'user_not_persisted'
@@ -142,9 +141,43 @@ post '/practice' do
   @questions = generate_questions(full_text)
   return json_error('Failed to generate quiz', 503) unless @questions
 
-  status 200
+  session[:questions] = @questions # Guardamos las preguntas en la sesión
+  session[:current_question_index] = 0 # Iniciamos en la primera pregunta
+
+  @current_question = @questions[session[:current_question_index]] # Mostramos la primera pregunta
   erb :question
 end
+
+post '/next_question' do
+  @questions = session[:questions] # Recuperamos las preguntas de la sesión
+  current_question_index = session[:current_question_index] # Recuperamos el índice
+
+  if @questions.nil? || current_question_index.nil?
+    @error = 'No se encontraron preguntas o índice. Por favor, sube un PDF para generar el quiz.'
+    redirect '/practice'
+  end
+
+  selected_answer = params[:selected_option]
+  correct_answer = @questions[current_question_index]['answer'] if @questions[current_question_index]
+
+  if selected_answer == correct_answer
+    @message = '¡Correcto!'
+  else
+    @message = "Incorrecto. La respuesta correcta era: #{correct_answer}"
+  end
+
+  session[:current_question_index] += 1 # Avanza al siguiente índice
+
+  if session[:current_question_index] < @questions.size
+    @current_question = @questions[session[:current_question_index]]
+    erb :question
+  else
+    @message = 'Has completado todas las preguntas.'
+    erb :quiz_complete
+  end
+end
+
+
 
 
 # Fetches the file from a file upload
