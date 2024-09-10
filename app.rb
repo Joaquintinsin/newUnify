@@ -18,9 +18,6 @@ set :allow_origin, 'http://127.0.0.1:3000'
 set :port, 3000
 enable :sessions
 
-# Variable global para el manejo de un usuario activo o inactivo
-isAnUserPresent = false
-
 # Variable global a los metodos utilizada en POST Register para manejar errores
 error_registration = ''
 
@@ -124,7 +121,7 @@ post '/register' do
 end
 
 post '/logout' do
-  isAnUserPresent = false
+  session[:isAnUserPresent] = false
   redirect '/'
 end
 
